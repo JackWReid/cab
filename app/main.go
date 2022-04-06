@@ -51,7 +51,7 @@ func mediaList(db *sql.DB, listType string, jsonFlag bool) {
 }
 
 func main() {
-	db, connErr := sql.Open("sqlite3", "../media.db")
+	db, connErr := sql.Open("sqlite3", "./media.db")
 	checkErr(connErr)
 
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
@@ -70,7 +70,15 @@ func main() {
 		backfillBooks(db)
 	case "add":
 		addCmd.Parse(os.Args[2:])
-		addMedia(db, *addMediaType, *addTitle)
+		switch *addMediaType {
+		case "book":
+			addBook(db, *addTitle)
+		case "movie":
+			addMovie(db, *addTitle)
+		default:
+			fmt.Println("Invalid media type to add: book or movie")
+		}
+
 	default:
 		fmt.Println("\ncot (1) help")
 		fmt.Println("\nSUBCOMMANDS")

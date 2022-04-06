@@ -23,6 +23,13 @@ type bookRecord struct {
 	Isbn   *string
 }
 
+type movieRecord struct {
+	Id    string
+	Title string
+	Year  string
+	Slug  string
+}
+
 func parseDate(rawString string) (date time.Time) {
 	var t time.Time
 	if len(rawString) == 10 {
@@ -97,6 +104,39 @@ func tableBookRecord(results []bookRecord) {
 			row.Id,
 			text.Trim(row.Title, 50),
 			text.Trim(*row.Author, 20),
+		})
+	}
+
+	tab.Render()
+}
+
+func tableMovieRecord(results []movieRecord) {
+	tab := table.NewWriter()
+	tab.SetOutputMirror(os.Stdout)
+	tab.AppendHeader(table.Row{"ID", "Title", "Year"})
+
+	for _, row := range results {
+		tab.AppendRow([]interface{}{
+			row.Id,
+			row.Title,
+			row.Year,
+		})
+	}
+
+	tab.Render()
+}
+
+func tableLbResults(results []letterboxdMovie) {
+	tab := table.NewWriter()
+	tab.SetOutputMirror(os.Stdout)
+	tab.AppendHeader(table.Row{"#", "Slug", "Title", "Year"})
+
+	for i, row := range results {
+		tab.AppendRow([]interface{}{
+			i,
+			row.Slug,
+			row.Title,
+			row.Year,
 		})
 	}
 
