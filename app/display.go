@@ -41,7 +41,7 @@ func parseDate(rawString string) (date time.Time) {
 	return t
 }
 
-func tableBookChrono(events []bookEvent, limit int) {
+func tableBookEvents(events []bookEvent, limit int) {
 	tab := table.NewWriter()
 	tab.SetOutputMirror(os.Stdout)
 	tab.AppendHeader(table.Row{"Date", "Title", "Author"})
@@ -67,7 +67,7 @@ func tableBookChrono(events []bookEvent, limit int) {
 	tab.Render()
 }
 
-func jsonBookChrono(events []bookEvent) {
+func jsonBookEvents(events []bookEvent) {
 	jsonBytes, err := json.Marshal(events)
 	if err != nil {
 		fmt.Println(err)
@@ -110,6 +110,24 @@ func tableBookRecord(results []bookRecord) {
 	tab.Render()
 }
 
+func tableMovieEvents(events []movieEvent, limit int) {
+	tab := table.NewWriter()
+	tab.SetOutputMirror(os.Stdout)
+	tab.AppendHeader(table.Row{"Date", "Title", "Year"})
+
+	limitedEvents := events
+	if len(events) > limit {
+		limitedEvents = events[:limit]
+	}
+
+	for _, row := range limitedEvents {
+		date := parseDate(row.Date).Format("2006-01-02")
+		tab.AppendRow([]interface{}{date, text.Trim(row.Title, 50), row.Year})
+	}
+
+	tab.Render()
+}
+
 func tableMovieRecord(results []movieRecord) {
 	tab := table.NewWriter()
 	tab.SetOutputMirror(os.Stdout)
@@ -124,6 +142,15 @@ func tableMovieRecord(results []movieRecord) {
 	}
 
 	tab.Render()
+}
+
+func jsonMovieEvents(events []movieEvent) {
+	jsonBytes, err := json.Marshal(events)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(string(jsonBytes))
 }
 
 func tableLbResults(results []letterboxdMovie) {

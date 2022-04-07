@@ -8,38 +8,39 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func addBook(db *sql.DB, bookTitle string) {
-	var existingBooks []bookRecord
-	fmt.Println("Check for existing books called", bookTitle)
-	bookQuery := `SELECT id, title, author, isbn FROM book WHERE title LIKE '%' || $1 || '%'`
-	rows, err := db.Query(bookQuery, bookTitle)
-	checkErr(err)
-
-	var exBookIds []string
-	for rows.Next() {
-		var row bookRecord
-		err = rows.Scan(&row.Id, &row.Title, &row.Author, &row.Isbn)
-		checkErr(err)
-		exBookIds = append(exBookIds, row.Id)
-		existingBooks = append(existingBooks, row)
+func addBook(db *sql.DB, bookTitle string) (bookRecord, error) {
+	if len(bookTitle) == 0 {
+		panic("No title passed")
 	}
 
-	rows.Close()
+	var exBookResults []bookRecord
+	var addedBook bookRecord
+	var bookAdded bool
+	searchRes, err := searchBooks(bookTitle)
 
-	tableBookRecord(existingBooks)
+	if err != nil {
+		fmt.Println("Failed to search books for", bookTitle)
+		return addedBook, err
+	}
 
-	var exBookRes string
-	fmt.Println("Enter existing book ID or [x] to search Google Books:")
-	fmt.Scanln(&exBookRes)
+	if searchRes.Count > 0 {
+		exBookResults = searchRes.Books
+		tableBookRecord(exBookResults)
+		var exBookRes string
+		fmt.Println("Enter existing book ID, or [x] to search Google Books:")
+		fmt.Scanln(&exBookRes)
 
-	if slices.Contains(exBookIds, exBookRes) {
-		f := func(b bookRecord) bool {
-			return exBookRes == b.Id
+		if slices.Contains(searchRes.BookIds, exBookRes) {
+			f := func(b bookRecord) bool {
+				return exBookRes == b.Id
+			}
+			selectedBookIdx := slices.IndexFunc(exBookResults, f)
+			addedBook = exBookResults[selectedBookIdx]
+			bookAdded = true
 		}
-		selectedBookIdx := slices.IndexFunc(existingBooks, f)
-		selectedBook := existingBooks[selectedBookIdx]
-		fmt.Println(selectedBook)
-	} else {
+	}
+
+	if !bookAdded {
 		gbResults := searchGoogleBooks(bookTitle)
 		tableGoogleResults(gbResults)
 
@@ -50,20 +51,22 @@ func addBook(db *sql.DB, bookTitle string) {
 		idx, _ := strconv.Atoi(gbBookRes)
 		sb := gbResults[idx]
 
-		insQ := `INSERT INTO book(title, author, isbn) VALUES(?, ?, ?)`
-		db.Exec(insQ, sb.title, sb.author, sb.isbn)
+		addedBook, err := insertBook(sb)
 
-		// var logRes string
-		// fmt.Println("Is this book:\n1. Read already\n2. Being read right now\n3. To read")
-		// fmt.Scanln(&logRes)
+		if err != nil {
+			fmt.Println("Failed to add book", sb.title)
+			return addedBook, err
+		}
 
-		// switch logRes {
-		// case "1":
-
-		// case "2":
-		// case "3":
-		// }
+		bookAdded = true
 	}
+
+	logBook(addedBook)
+	return addedBook, nil
+}
+
+func logBook(book bookRecord) {
+	fmt.Println("How do you want to log %s?", book.Title)
 }
 
 func addMovie(db *sql.DB, movieTitle string) {

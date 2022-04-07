@@ -9,63 +9,86 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func queryGenerate(queryType string) (queryString string) {
-	switch queryType {
-	case "reading":
-		return "SELECT title, author, date FROM view_book_reading ORDER BY date DESC"
-	case "read":
-		return "SELECT title, author, date FROM view_book_read ORDER BY date DESC"
-	case "toread":
-		return "SELECT title, author, date FROM view_book_toread ORDER BY date DESC"
-	case "watched":
-		return "SELECT title, date FROM view_movie_watched ORDER BY date DESC"
-	case "towatch":
-		return "SELECT title, date FROM view_movie_towatch ORDER BY date DESC"
-	default:
-		return ""
-	}
-}
+var DB *sql.DB
 
-func mediaList(db *sql.DB, listType string, jsonFlag bool) {
-	bookEvents := []bookEvent{}
-	var rows *sql.Rows
-	var err error
-	queryString := queryGenerate(listType)
-	rows, err = db.Query(queryString)
-	checkErr(err)
+func bookList(bookStatus string, jsonFlag bool) {
+	bookEvents, err := getBooksByStatus(bookStatus)
 
-	for rows.Next() {
-		var row bookEvent
-		err = rows.Scan(&row.Title, &row.Author, &row.Date)
-		checkErr(err)
-		bookEvents = append(bookEvents, row)
+	if err != nil {
+		fmt.Println("Failed to get books by status")
+		return
 	}
 
 	if jsonFlag {
-		jsonBookChrono(bookEvents)
+		jsonBookEvents(bookEvents)
 	} else {
-		tableBookChrono(bookEvents, 1000)
+		tableBookEvents(bookEvents, 1000)
+	}
+}
+
+func movieList(movieStatus string, jsonFlag bool) {
+	movieEvents, err := getMoviesByStatus(movieStatus)
+
+	if err != nil {
+		fmt.Println("Failed to get movies by status")
+		return
 	}
 
-	rows.Close()
+	if jsonFlag {
+		jsonMovieEvents(movieEvents)
+	} else {
+		tableMovieEvents(movieEvents, 1000)
+	}
+}
+
+func printHelp(listCmd *flag.FlagSet, addCmd *flag.FlagSet) {
+	fmt.Println("===\ncab")
+	fmt.Println("cab is a way to manage logs and lists for books and movies.\n===\n")
+	fmt.Println("SUBCOMMANDS")
+	fmt.Println("\nlist\nPrint a list of media that's been marked as done, doing, or to do")
+	listCmd.PrintDefaults()
+	fmt.Println("\nadd\nAdd books and movies from Google Books and Letterboxd")
+	addCmd.PrintDefaults()
+	fmt.Println("\nbackfill\nUse Google Books to fill in missing author and ISBN data\n")
+	os.Exit(0)
 }
 
 func main() {
 	db, connErr := sql.Open("sqlite3", "./media.db")
-	checkErr(connErr)
+
+	if connErr != nil {
+		fmt.Println("Failed to connect to DB")
+		os.Exit(1)
+	}
+
+	DB = db
 
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	listJson := listCmd.Bool("json", false, "Output lists in JSON, default is table")
-	listMedia := listCmd.String("media", "reading", "Which media and status to list")
+	listMediaType := listCmd.String("type", "book", "Book or movie")
+	listMediaStatus := listCmd.String("status", "reading", "Status of the media to list")
 
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	addMediaType := addCmd.String("type", "book", "Book or movie")
 	addTitle := addCmd.String("title", "", "Name of the book or movie to add")
 
+	if len(os.Args) == 1 {
+		printHelp(listCmd, addCmd)
+		db.Close()
+		return
+	}
+
 	switch os.Args[1] {
 	case "list":
 		listCmd.Parse(os.Args[2:])
-		mediaList(db, *listMedia, *listJson)
+		switch *listMediaType {
+		case "book":
+			bookList(*listMediaStatus, *listJson)
+		case "movie":
+			movieList(*listMediaStatus, *listJson)
+		default:
+			fmt.Println("Invalid media type to add: book or movie")
+		}
 	case "backfill":
 		backfillBooks(db)
 	case "add":
@@ -80,12 +103,7 @@ func main() {
 		}
 
 	default:
-		fmt.Println("\ncot (1) help")
-		fmt.Println("\nSUBCOMMANDS")
-		fmt.Println("\nlist\nPrint a list of media that's been marked as done, doing, or to do")
-		listCmd.PrintDefaults()
-		fmt.Println("\nbackfill\nUse Google Books to fill in missing author and ISBN data\n\n")
-		os.Exit(0)
+		printHelp(listCmd, addCmd)
 	}
 
 	db.Close()
