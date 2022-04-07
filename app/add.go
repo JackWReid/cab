@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -48,7 +49,13 @@ func addBook(db *sql.DB, bookTitle string) (bookRecord, error) {
 		fmt.Println("Enter # of book from Google Books:")
 		fmt.Scanln(&gbBookRes)
 
-		idx, _ := strconv.Atoi(gbBookRes)
+		idx, err := strconv.Atoi(gbBookRes)
+
+		if err != nil || idx > len(gbResults) {
+			err = errors.New("Invalid Google Books ID")
+			return addedBook, err
+		}
+
 		sb := gbResults[idx]
 
 		addedBook, err := insertBook(sb)
@@ -66,7 +73,28 @@ func addBook(db *sql.DB, bookTitle string) (bookRecord, error) {
 }
 
 func logBook(book bookRecord) {
-	fmt.Println("How do you want to log %s?", book.Title)
+	var logRes string
+	var logErr error
+	fmt.Println("How do you want to log", book.Title, "?")
+	fmt.Println("[1] Read\n[2] Reading\n[3] To read")
+	fmt.Print("> ")
+	fmt.Scan(&logRes)
+
+	switch logRes {
+	case "1":
+		logErr = readBook(book)
+	case "2":
+		logErr = readingBook(book)
+	case "3":
+		logErr = toreadBook(book)
+	default:
+		panic("Invalid log choice")
+	}
+
+	if logErr != nil {
+		fmt.Println("Error logging book")
+		fmt.Println(logErr)
+	}
 }
 
 func addMovie(db *sql.DB, movieTitle string) {

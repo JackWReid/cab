@@ -31,6 +31,7 @@ func movieList(movieStatus string, jsonFlag bool) {
 
 	if err != nil {
 		fmt.Println("Failed to get movies by status")
+		fmt.Println(err)
 		return
 	}
 
