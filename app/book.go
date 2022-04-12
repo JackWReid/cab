@@ -5,6 +5,19 @@ import (
 	"fmt"
 )
 
+type bookRecord struct {
+	Id     string
+	Title  string
+	Author *string
+	Isbn   *string
+}
+
+type bookEvent struct {
+	Title  string  `json:"title"`
+	Author *string `json:"author"`
+	Date   *string `json:"date_updated"`
+}
+
 type bookSearchResults struct {
 	Count   int
 	BookIds []string
@@ -16,11 +29,11 @@ func getBooksByStatus(bookStatus string) ([]bookEvent, error) {
 	var bookResults []bookEvent
 
 	switch bookStatus {
-	case "reading":
+	case "doing":
 		qStr = "SELECT title, author, date FROM view_book_reading ORDER BY date DESC"
-	case "read":
+	case "done":
 		qStr = "SELECT title, author, date FROM view_book_read ORDER BY date DESC"
-	case "toread":
+	case "todo":
 		qStr = "SELECT title, author, date FROM view_book_toread ORDER BY date DESC"
 	default:
 		return bookResults, errors.New("Invalid bookStatus")
@@ -82,18 +95,27 @@ func readBook(book bookRecord) error {
 
 	if cheCount > 0 {
 		fmt.Println(book.Title, "already marked as read")
-		return nil
-		// TODO Update date to now on confirm
 	} else {
 		insQ := `INSERT INTO book_log(book_id) VALUES(?)`
 		_, err := DB.Exec(insQ, book.Id)
 
 		if err != nil {
+			fmt.Println("insert to log err")
 			return err
 		}
-
-		return nil
 	}
+
+	unreadingQ := `DELETE FROM book_reading WHERE book_id = $1`
+	_, err := DB.Exec(unreadingQ, book.Id)
+
+	untoreadQ := `DELETE FROM book_to_book_collection WHERE book_id = $1 AND collection_id = 1`
+	_, err = DB.Exec(untoreadQ, book.Id)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func toreadBook(book bookRecord) error {

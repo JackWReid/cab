@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
@@ -55,10 +55,11 @@ func printHelp(listCmd *flag.FlagSet, addCmd *flag.FlagSet) {
 }
 
 func main() {
-	db, connErr := sql.Open("sqlite3", "./media.db")
+	db, connErr := sql.Open("sqlite", "./media.db")
 
 	if connErr != nil {
 		fmt.Println("Failed to connect to DB")
+		fmt.Println(connErr)
 		os.Exit(1)
 	}
 
@@ -67,7 +68,7 @@ func main() {
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	listJson := listCmd.Bool("json", false, "Output lists in JSON, default is table")
 	listMediaType := listCmd.String("type", "book", "Book or movie")
-	listMediaStatus := listCmd.String("status", "reading", "Status of the media to list")
+	listMediaStatus := listCmd.String("status", "done", "Done, doing, todo")
 
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	addMediaType := addCmd.String("type", "book", "Book or movie")

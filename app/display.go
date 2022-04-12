@@ -10,32 +10,17 @@ import (
 	"github.com/jedib0t/go-pretty/text"
 )
 
-type bookEvent struct {
-	Title  string
-	Author *string
-	Date   *string
-}
-
-type bookRecord struct {
-	Id     string
-	Title  string
-	Author *string
-	Isbn   *string
-}
-
-type movieRecord struct {
-	Id    string
-	Title string
-	Year  string
-	Slug  string
-}
-
 func parseDate(rawString string) (date time.Time) {
 	var t time.Time
-	if len(rawString) == 10 {
-		t, _ = time.Parse("2006-01-02", rawString)
-	} else {
+	switch len(rawString) {
+	case 23:
 		t, _ = time.Parse("2006-01-02 15:04:05 UTC", rawString)
+	case 19:
+		t, _ = time.Parse("2006-01-02 15:04:05", rawString)
+	case 10:
+		t, _ = time.Parse("2006-01-02", rawString)
+	default:
+		panic("Failed to parse date")
 	}
 
 	return t

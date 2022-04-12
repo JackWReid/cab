@@ -10,13 +10,14 @@ import (
 )
 
 func addBook(db *sql.DB, bookTitle string) (bookRecord, error) {
-	if len(bookTitle) == 0 {
-		panic("No title passed")
-	}
-
 	var exBookResults []bookRecord
 	var addedBook bookRecord
 	var bookAdded bool
+
+	if len(bookTitle) == 0 {
+		return addedBook, errors.New("No title given to add book")
+	}
+
 	searchRes, err := searchBooks(bookTitle)
 
 	if err != nil {
@@ -39,6 +40,8 @@ func addBook(db *sql.DB, bookTitle string) (bookRecord, error) {
 			addedBook = exBookResults[selectedBookIdx]
 			bookAdded = true
 		}
+	} else {
+		fmt.Println("No books found, searching Google Books.")
 	}
 
 	if !bookAdded {
@@ -97,53 +100,93 @@ func logBook(book bookRecord) {
 	}
 }
 
-func addMovie(db *sql.DB, movieTitle string) {
-	var existingMovies []movieRecord
-	fmt.Println("Check for existing movies called", movieTitle)
-	movieQuery := `SELECT id, title, year, letterboxd_uri FROM movie WHERE title LIKE '%' || $1 || '%'`
-	rows, err := db.Query(movieQuery, movieTitle)
-	checkErr(err)
+func addMovie(db *sql.DB, movieTitle string) (movieRecord, error) {
+	var exMovieResults []movieRecord
+	var addedMovie movieRecord
+	var movieAdded bool
 
-	var exMovieIds []string
-	for rows.Next() {
-		var row movieRecord
-		err = rows.Scan(&row.Id, &row.Title, &row.Year, &row.Slug)
-		checkErr(err)
-		exMovieIds = append(exMovieIds, row.Id)
-		existingMovies = append(existingMovies, row)
+	if len(movieTitle) == 0 {
+		return addedMovie, errors.New("No title given to add book")
 	}
 
-	rows.Close()
+	searchRes, err := searchMovies(movieTitle)
 
-	tableMovieRecord(existingMovies)
-	var exMovieRes string
-	fmt.Println("Enter existing movie ID or [x] to search Letterboxd:")
-	fmt.Scanln(&exMovieRes)
+	if err != nil {
+		fmt.Println("Failed to search movies for", movieTitle)
+		return addedMovie, err
+	}
 
-	if slices.Contains(exMovieIds, exMovieRes) {
-		fmt.Println("selected ex movie", exMovieRes)
-		f := func(m movieRecord) bool {
-			return exMovieRes == m.Id
+	if searchRes.Count > 0 {
+		exMovieResults = searchRes.Movies
+		tableMovieRecord(exMovieResults)
+		var exMovieRes string
+		fmt.Println("Enter existing movie ID, or [x] to search Letterboxd:")
+		fmt.Print("> ")
+		fmt.Scan(&exMovieRes)
+
+		if slices.Contains(searchRes.MovieIds, exMovieRes) {
+			f := func(b movieRecord) bool {
+				return exMovieRes == b.Id
+			}
+			selectedMovieIdx := slices.IndexFunc(exMovieResults, f)
+			addedMovie = exMovieResults[selectedMovieIdx]
+			movieAdded = true
 		}
-		selectedMovieIdx := slices.IndexFunc(existingMovies, f)
-		selectedMovie := existingMovies[selectedMovieIdx]
-		fmt.Println(selectedMovie)
 	} else {
+		fmt.Println("No movies found, searching Letterboxd.")
+	}
+
+	if !movieAdded {
 		lbResults := searchLb(movieTitle)
 		tableLbResults(lbResults)
 
 		var lbMovieRes string
 		fmt.Println("Enter # of movie from Letterboxd:")
-		fmt.Scanln(&lbMovieRes)
+		fmt.Print("> ")
+		fmt.Scan(&lbMovieRes)
 
-		fmt.Println("selected lb movie", lbMovieRes)
-		idx, _ := strconv.Atoi(lbMovieRes)
+		idx, err := strconv.Atoi(lbMovieRes)
+
+		if err != nil || idx > len(lbResults) {
+			err = errors.New("Invalid Letterboxd ID")
+			return addedMovie, err
+		}
+
 		sm := lbResults[idx]
 
-		insQ := `INSERT INTO movie(title, year, letterboxd_uri) VALUES(?, ?, ?)`
-		_, err := db.Exec(insQ, sm.Title, sm.Year, sm.Slug)
+		addedMovie, err = insertMovie(sm)
+
 		if err != nil {
-			fmt.Println("db err", err)
+			fmt.Println("Failed to add movie", sm.Title)
+			return addedMovie, err
 		}
+
+		movieAdded = true
+	}
+
+	logMovie(addedMovie)
+	return addedMovie, nil
+}
+
+func logMovie(movie movieRecord) {
+	var logRes string
+	var logErr error
+	fmt.Println("How do you want to log", movie.Title, "?")
+	fmt.Println("[1] Watched\n[2] To watch")
+	fmt.Print("> ")
+	fmt.Scan(&logRes)
+
+	switch logRes {
+	case "1":
+		logErr = watchedMovie(movie)
+	case "2":
+		logErr = towatchMovie(movie)
+	default:
+		panic("Invalid log choice")
+	}
+
+	if logErr != nil {
+		fmt.Println("Error logging movie")
+		fmt.Println(logErr)
 	}
 }
