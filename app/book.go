@@ -129,10 +129,34 @@ func toreadBook(book bookRecord) error {
 	return nil
 }
 
-func searchBooks(query string) (bookSearchResults, error) {
+func searchBooks(titleQuery string) (bookSearchResults, error) {
 	var bookResults []bookRecord
 	bookQuery := `SELECT id, title, author, isbn FROM book WHERE title LIKE '%' || $1 || '%'`
-	rows, err := DB.Query(bookQuery, query)
+	rows, err := DB.Query(bookQuery, titleQuery)
+	checkErr(err)
+
+	var bookIds []string
+	for rows.Next() {
+		var row bookRecord
+		err = rows.Scan(&row.Id, &row.Title, &row.Author, &row.Isbn)
+		checkErr(err)
+		bookIds = append(bookIds, row.Id)
+		bookResults = append(bookResults, row)
+	}
+
+	rows.Close()
+
+	return bookSearchResults{
+		Count:   len(bookResults),
+		BookIds: bookIds,
+		Books:   bookResults,
+	}, nil
+}
+
+func searchBooksByAuthor(authorQuery string) (bookSearchResults, error) {
+	var bookResults []bookRecord
+	bookQuery := `SELECT id, title, author, isbn FROM book WHERE author LIKE '%' || $1 || '%'`
+	rows, err := DB.Query(bookQuery, authorQuery)
 	checkErr(err)
 
 	var bookIds []string

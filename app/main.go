@@ -65,6 +65,11 @@ func main() {
 
 	DB = db
 
+	getOkuFetcher(OkuReadUrl)()
+	getOkuFetcher(OkuToreadUrl)()
+	getOkuFetcher(OkuReadingUrl)()
+	return
+
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	listJson := listCmd.Bool("json", false, "Output lists in JSON, default is table")
 	listMediaType := listCmd.String("type", "book", "Book or movie")
