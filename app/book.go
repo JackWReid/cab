@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 type bookRecord struct {
@@ -10,6 +11,7 @@ type bookRecord struct {
 	Title  string
 	Author *string
 	Isbn   *string
+	Guid   *string
 }
 
 type bookEvent struct {
@@ -23,6 +25,10 @@ type bookSearchResults struct {
 	BookIds []string
 	Books   []bookRecord
 }
+
+var toreadCollectionId int64 = 1
+var readCollectionId int64 = 2
+var readingCollectionId int64 = 3
 
 func getBooksByStatus(bookStatus string) ([]bookEvent, error) {
 	var qStr string
@@ -175,4 +181,39 @@ func searchBooksByAuthor(authorQuery string) (bookSearchResults, error) {
 		BookIds: bookIds,
 		Books:   bookResults,
 	}, nil
+}
+
+func getBookById(id int64) (bookRecord, error) {
+	var book bookRecord
+	bookQuery := `SELECT id, title, author, isbn, oku_guid FROM book WHERE id = $1`
+	row := DB.QueryRow(bookQuery, id)
+	err := row.Scan(&book.Id, &book.Title, &book.Author, &book.Isbn, &book.Guid)
+
+	if err != nil {
+		return book, err
+	}
+
+	return book, err
+}
+
+func getBookByGuid(guid string) (bookRecord, error) {
+	var book bookRecord
+	bookQuery := `SELECT id, title, author, isbn, oku_guid FROM book WHERE oku_guid = $1`
+	row := DB.QueryRow(bookQuery, guid)
+	err := row.Scan(&book.Id, &book.Title, &book.Author, &book.Isbn, &book.Guid)
+
+	if err != nil {
+		return book, err
+	}
+
+	return book, err
+}
+
+func addBookToCollection(book bookRecord, collectionId int64, date *time.Time) {
+	insQ := `INSERT OR IGNORE INTO book_to_book_collection(book_id, collection_id, date) VALUES (?,?,?)`
+	_, err := DB.Exec(insQ, book.Id, collectionId, date)
+
+	if err != nil {
+		fmt.Println(err)
+	}
 }

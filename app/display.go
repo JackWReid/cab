@@ -10,9 +10,17 @@ import (
 	"github.com/jedib0t/go-pretty/text"
 )
 
+type displayBook struct {
+	Title  string `json:"title"`
+	Author string `json:"author"`
+	Date   string `json:"date"`
+}
+
 func parseDate(rawString string) (date time.Time) {
 	var t time.Time
 	switch len(rawString) {
+	case 29:
+		t, _ = time.Parse("2006-01-02 15:04:05 +0000 UTC", rawString)
 	case 23:
 		t, _ = time.Parse("2006-01-02 15:04:05 UTC", rawString)
 	case 19:
@@ -53,7 +61,18 @@ func tableBookEvents(events []bookEvent, limit int) {
 }
 
 func jsonBookEvents(events []bookEvent) {
-	jsonBytes, err := json.Marshal(events)
+	var displayBooks []displayBook
+
+	for _, e := range events {
+		dBook := displayBook{
+			Title:  e.Title,
+			Author: *e.Author,
+			Date:   parseDate(*e.Date).Format("2006-01-02"),
+		}
+		displayBooks = append(displayBooks, dBook)
+	}
+
+	jsonBytes, err := json.Marshal(displayBooks)
 	if err != nil {
 		fmt.Println(err)
 		return

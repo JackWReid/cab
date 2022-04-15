@@ -65,11 +65,6 @@ func main() {
 
 	DB = db
 
-	getOkuFetcher(OkuReadUrl)()
-	getOkuFetcher(OkuToreadUrl)()
-	getOkuFetcher(OkuReadingUrl)()
-	return
-
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	listJson := listCmd.Bool("json", false, "Output lists in JSON, default is table")
 	listMediaType := listCmd.String("type", "book", "Book or movie")
@@ -97,7 +92,9 @@ func main() {
 			fmt.Println("Invalid media type to add: book or movie")
 		}
 	case "backfill":
-		backfillBooks(db)
+		getOkuFetcher("reading")()
+		getOkuFetcher("read")()
+		getOkuFetcher("toread")()
 	case "add":
 		addCmd.Parse(os.Args[2:])
 		switch *addMediaType {

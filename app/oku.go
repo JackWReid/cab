@@ -19,16 +19,32 @@ type OkuFeed struct {
 	Items []OkuBookEvent
 }
 
+type BookIdPair struct {
+	Id   int64
+	Guid string
+}
+
 var OkuReadUrl string = "https://oku.club/rss/collection/zQtTo"
 var OkuToreadUrl string = "https://oku.club/rss/collection/JSKHS"
 var OkuReadingUrl string = "https://oku.club/rss/collection/2f67M"
 
-func getOkuFetcher(feedUrl string) func() OkuFeed {
+func getOkuFetcher(collection string) func() OkuFeed {
+	urlMap := map[string]string{
+		"reading": OkuReadingUrl,
+		"toread":  OkuToreadUrl,
+		"read":    OkuReadUrl,
+	}
+
 	return func() OkuFeed {
 		var resFeed OkuFeed
 		var resItems []OkuBookEvent
 		fp := gofeed.NewParser()
-		feed, _ := fp.ParseURL(feedUrl)
+		feed, err := fp.ParseURL(urlMap[collection])
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
 		for _, feedEvent := range feed.Items {
 			okuEvent := OkuBookEvent{
 				Date:    feedEvent.PublishedParsed,
@@ -42,53 +58,85 @@ func getOkuFetcher(feedUrl string) func() OkuFeed {
 		resFeed.Date = feed.UpdatedParsed
 		resFeed.Items = resItems
 
-		resolveOkuFeedBooks(resFeed.Items)
+		resolveOkuFeed(collection, resFeed)
 
 		return resFeed
 	}
 }
 
-func resolveOkuFeeds() {
+func resolveOkuFeed(collection string, feedData OkuFeed) {
+	idMap := map[string]int64{
+		"reading": readingCollectionId,
+		"toread":  toreadCollectionId,
+		"read":    readCollectionId,
+	}
 
+	for _, book := range feedData.Items {
+		var insertId int64 = 0
+		insQ := `INSERT OR IGNORE INTO book(title, author, oku_guid) VALUES (?, ?, ?)`
+		result, err := DB.Exec(insQ, book.Title, book.Author, book.OkuGuid)
+
+		if result != nil {
+			insertId, err = result.LastInsertId()
+		}
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		var resolvedBook bookRecord
+		if insertId == 0 {
+			resolvedBook, _ = getBookByGuid(book.OkuGuid)
+		} else {
+			resolvedBook, _ = getBookById(insertId)
+		}
+
+		addBookToCollection(resolvedBook, idMap[collection], book.Date)
+	}
+
+	clearCollectionExcept(idMap[collection], feedData.Items)
 }
 
-func giveBookOkuGuid(book bookRecord, guid string) error {
-	upQ := `UPDATE book SET oku_guid = $1 WHERE id = $2`
-	_, err := DB.Exec(upQ, guid, book.Id)
+func clearCollectionExcept(collectionId int64, nBooks []OkuBookEvent) {
+	var existingBookIds []BookIdPair
 
-	if err != nil {
-		fmt.Println("Failed to update Oku GUID for", book.Title)
+	q := `SELECT id, oku_guid FROM book INNER JOIN book_to_book_collection ON book_id = id WHERE collection_id = $1`
+	rows, _ := DB.Query(q, collectionId)
+
+	for rows.Next() {
+		var oPair BookIdPair
+		rows.Scan(&oPair.Id, &oPair.Guid)
+		existingBookIds = append(existingBookIds, oPair)
 	}
 
-	return err
-}
+	rows.Close()
 
-func resolveOkuFeedBooks(be []OkuBookEvent) {
-	var mBooks []bookRecord
-	var unBooks []OkuBookEvent
-	for _, e := range be {
-		sr, _ := searchBooks(e.Title)
-		if len(sr.Books) > 0 {
-			mBooks = append(mBooks, sr.Books[0])
-			giveBookOkuGuid(sr.Books[0], e.OkuGuid)
-		} else {
-			unBooks = append(unBooks, e)
+	for _, existingBook := range existingBookIds {
+		var isBookStillInCollection bool = false
+		var bookDate *time.Time
+		for _, nBook := range nBooks {
+			if nBook.OkuGuid == existingBook.Guid {
+				isBookStillInCollection = true
+				bookDate = nBook.Date
+			}
 		}
-	}
 
-	var auUnBooks []OkuBookEvent
+		if isBookStillInCollection {
+			uQ := `UPDATE book_to_book_collection SET date = $1 WHERE book_id = $2 AND collection_id = $3`
+			_, err := DB.Exec(uQ, bookDate, existingBook.Id, collectionId)
 
-	for _, e2 := range unBooks {
-		sr, _ := searchBooksByAuthor(e2.Author)
-		if len(sr.Books) == 1 {
-			mBooks = append(mBooks, sr.Books[0])
-			giveBookOkuGuid(sr.Books[0], e2.OkuGuid)
+			if err != nil {
+				fmt.Println("Error updating")
+				fmt.Println(err)
+			}
 		} else {
-			auUnBooks = append(auUnBooks, e2)
-		}
-	}
+			fmt.Println("Deleting", existingBook.Guid, "from", collectionId)
+			dQ := `DELETE FROM book_to_book_collection WHERE book_id = $1 AND collection_id = $2`
+			_, err := DB.Exec(dQ, existingBook.Id, collectionId)
 
-	for _, um := range auUnBooks {
-		fmt.Println(um.Title)
+			if err != nil {
+				fmt.Println("Error deleting")
+			}
+		}
 	}
 }
