@@ -24,15 +24,11 @@ type BookIdPair struct {
 	Guid string
 }
 
-var OkuReadUrl string = "https://oku.club/rss/collection/zQtTo"
-var OkuToreadUrl string = "https://oku.club/rss/collection/JSKHS"
-var OkuReadingUrl string = "https://oku.club/rss/collection/2f67M"
-
 func getOkuFetcher(collection string) func() OkuFeed {
 	urlMap := map[string]string{
-		"reading": OkuReadingUrl,
-		"toread":  OkuToreadUrl,
-		"read":    OkuReadUrl,
+		"reading": GlobalConfig.OkuReadingURL,
+		"toread":  GlobalConfig.OkuToreadURL,
+		"read":    GlobalConfig.OkuReadURL,
 	}
 
 	return func() OkuFeed {
@@ -40,6 +36,7 @@ func getOkuFetcher(collection string) func() OkuFeed {
 		var resItems []OkuBookEvent
 		fp := gofeed.NewParser()
 		feed, err := fp.ParseURL(urlMap[collection])
+		fmt.Println(urlMap[collection])
 
 		if err != nil {
 			fmt.Println(err)
@@ -65,43 +62,32 @@ func getOkuFetcher(collection string) func() OkuFeed {
 }
 
 func resolveOkuFeed(collection string, feedData OkuFeed) {
-	idMap := map[string]int64{
-		"reading": readingCollectionId,
-		"toread":  toreadCollectionId,
-		"read":    readCollectionId,
-	}
-
+	fmt.Println("resolve")
+	fmt.Println(collection)
 	for _, book := range feedData.Items {
-		var insertId int64 = 0
 		insQ := `INSERT OR IGNORE INTO book(title, author, oku_guid) VALUES (?, ?, ?)`
-		result, err := DB.Exec(insQ, book.Title, book.Author, book.OkuGuid)
-
-		if result != nil {
-			insertId, err = result.LastInsertId()
-		}
+		_, err := DB.Exec(insQ, book.Title, book.Author, book.OkuGuid)
 
 		if err != nil {
 			fmt.Println(err)
 		}
 
 		var resolvedBook bookRecord
-		if insertId == 0 {
-			resolvedBook, _ = getBookByGuid(book.OkuGuid)
-		} else {
-			resolvedBook, _ = getBookById(insertId)
-		}
+		resolvedBook, _ = getBookByGuid(book.OkuGuid)
 
-		addBookToCollection(resolvedBook, idMap[collection], book.Date)
+		addBookToCollection(resolvedBook, collection, book.Date)
 	}
 
-	clearCollectionExcept(idMap[collection], feedData.Items)
+	clearCollectionExcept(collection, feedData.Items)
 }
 
-func clearCollectionExcept(collectionId int64, nBooks []OkuBookEvent) {
+func clearCollectionExcept(collection string, nBooks []OkuBookEvent) {
+	fmt.Println("clear")
+	fmt.Println(collection)
 	var existingBookIds []BookIdPair
 
-	q := `SELECT id, oku_guid FROM book INNER JOIN book_to_book_collection ON book_id = id WHERE collection_id = $1`
-	rows, _ := DB.Query(q, collectionId)
+	q := `SELECT oku_guid FROM book INNER JOIN book_collection ON book_id = oku_guid WHERE collection = $1`
+	rows, _ := DB.Query(q, collection)
 
 	for rows.Next() {
 		var oPair BookIdPair
@@ -122,17 +108,16 @@ func clearCollectionExcept(collectionId int64, nBooks []OkuBookEvent) {
 		}
 
 		if isBookStillInCollection {
-			uQ := `UPDATE book_to_book_collection SET date = $1 WHERE book_id = $2 AND collection_id = $3`
-			_, err := DB.Exec(uQ, bookDate, existingBook.Id, collectionId)
+			uQ := `UPDATE book_collection SET date_updates = $1 WHERE book_id = $2 AND collection = $3`
+			_, err := DB.Exec(uQ, bookDate, existingBook.Id, collection)
 
 			if err != nil {
 				fmt.Println("Error updating")
 				fmt.Println(err)
 			}
 		} else {
-			fmt.Println("Deleting", existingBook.Guid, "from", collectionId)
-			dQ := `DELETE FROM book_to_book_collection WHERE book_id = $1 AND collection_id = $2`
-			_, err := DB.Exec(dQ, existingBook.Id, collectionId)
+			dQ := `DELETE FROM book_collection WHERE book_id = $1 AND collection = $2`
+			_, err := DB.Exec(dQ, existingBook.Id, collection)
 
 			if err != nil {
 				fmt.Println("Error deleting")

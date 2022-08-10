@@ -10,6 +10,7 @@ import (
 )
 
 var DB *sql.DB
+var GlobalConfig Config
 
 func bookList(bookStatus string, jsonFlag bool) {
 	bookEvents, err := getBooksByStatus(bookStatus)
@@ -42,40 +43,56 @@ func movieList(movieStatus string, jsonFlag bool) {
 	}
 }
 
-func printHelp(listCmd *flag.FlagSet, addCmd *flag.FlagSet) {
+func printHelp(listCmd *flag.FlagSet, importCmd *flag.FlagSet) {
 	fmt.Println("===\ncab")
 	fmt.Println("cab is a way to manage logs and lists for books and movies.\n===\n")
 	fmt.Println("SUBCOMMANDS")
 	fmt.Println("\nlist\nPrint a list of media that's been marked as done, doing, or to do")
 	listCmd.PrintDefaults()
-	fmt.Println("\nadd\nAdd books and movies from Google Books and Letterboxd")
-	addCmd.PrintDefaults()
-	fmt.Println("\nbackfill\nUse Google Books to fill in missing author and ISBN data\n")
+	fmt.Println("\nimport\nUse Oku and Letterboxd to import media catalog\n")
+	importCmd.PrintDefaults()
 	os.Exit(0)
 }
 
 func main() {
-	db, connErr := sql.Open("sqlite", "./media.db")
+	config, configErr := loadConfig()
+
+	if configErr != nil {
+		fmt.Println("Failed to load config")
+		fmt.Println(configErr)
+		os.Exit(1)
+	}
+
+	GlobalConfig = config
+
+	db, connErr := sql.Open("sqlite", GlobalConfig.DbFile)
 
 	if connErr != nil {
-		fmt.Println("Failed to connect to DB")
+		fmt.Println("Failed to open DB")
 		fmt.Println(connErr)
 		os.Exit(1)
 	}
 
 	DB = db
 
+	pingErr := DB.Ping()
+
+	if pingErr != nil {
+		fmt.Println("Failed to ping DB")
+		fmt.Println(pingErr)
+		os.Exit(1)
+	}
+
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	listJson := listCmd.Bool("json", false, "Output lists in JSON, default is table")
 	listMediaType := listCmd.String("type", "book", "Book or movie")
 	listMediaStatus := listCmd.String("status", "done", "Done, doing, todo")
 
-	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
-	addMediaType := addCmd.String("type", "book", "Book or movie")
-	addTitle := addCmd.String("title", "", "Name of the book or movie to add")
+	importCmd := flag.NewFlagSet("import", flag.ExitOnError)
+	importMediaType := importCmd.String("type", "book", "Book or movie")
 
 	if len(os.Args) == 1 {
-		printHelp(listCmd, addCmd)
+		printHelp(listCmd, importCmd)
 		db.Close()
 		return
 	}
@@ -91,23 +108,21 @@ func main() {
 		default:
 			fmt.Println("Invalid media type to add: book or movie")
 		}
-	case "backfill":
-		getOkuFetcher("reading")()
-		getOkuFetcher("read")()
-		getOkuFetcher("toread")()
-	case "add":
-		addCmd.Parse(os.Args[2:])
-		switch *addMediaType {
+	case "import":
+		importCmd.Parse(os.Args[2:])
+		switch *importMediaType {
 		case "book":
-			addBook(db, *addTitle)
+			getOkuFetcher("reading")()
+			getOkuFetcher("read")()
+			getOkuFetcher("toread")()
 		case "movie":
-			addMovie(db, *addTitle)
+			fmt.Println("Nothing for now")
 		default:
-			fmt.Println("Invalid media type to add: book or movie")
+			fmt.Println("Invalid media type to import: book or movie")
 		}
 
 	default:
-		printHelp(listCmd, addCmd)
+		printHelp(listCmd, importCmd)
 	}
 
 	db.Close()

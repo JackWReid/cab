@@ -80,24 +80,6 @@ func jsonBookEvents(events []bookEvent) {
 	fmt.Println(string(jsonBytes))
 }
 
-func tableGoogleResults(results []condensedGoogleResult) {
-	tab := table.NewWriter()
-	tab.SetOutputMirror(os.Stdout)
-	tab.AppendHeader(table.Row{"#", "ISBN", "Title", "Subtitle", "Author"})
-
-	for i, row := range results {
-		tab.AppendRow([]interface{}{
-			i,
-			row.isbn,
-			text.Trim(row.title, 30),
-			text.Trim(row.subtitle, 50),
-			row.author,
-		})
-	}
-
-	tab.Render()
-}
-
 func tableBookRecord(results []bookRecord) {
 	tab := table.NewWriter()
 	tab.SetOutputMirror(os.Stdout)
@@ -105,7 +87,7 @@ func tableBookRecord(results []bookRecord) {
 
 	for _, row := range results {
 		tab.AppendRow([]interface{}{
-			row.Id,
+			row.OkuGuid,
 			text.Trim(row.Title, 50),
 			text.Trim(*row.Author, 20),
 		})
